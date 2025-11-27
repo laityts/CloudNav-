@@ -12,14 +12,14 @@
 <br/>
 
 <!-- 请将下方的链接替换为您实际部署后的 Cloudflare Pages 域名 -->
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-View%20Online-7c3aed?style=for-the-badge&logo=sparkles)](https://your-project-name.pages.dev)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-View%20Online-7c3aed?style=for-the-badge&logo=sparkles)](https://demo.newai.netlib.re)
 
 <br/>
 
 **一个现代化、基于 AI 辅助的全栈个人导航站。**
 **无需购买服务器，依托 Cloudflare 免费托管，实现多端数据实时同步。**
 
-[在线演示](https://your-project-name.pages.dev) • [功能特性](#-核心功能) • [项目展示](#-项目展示) • [部署教程](#-部署教程-免费) • [使用指南](#-使用指南)
+[在线演示](https://demo.newai.netlib.re) • [功能特性](#-核心功能) • [项目展示](#-项目展示) • [部署教程](#-部署教程-免费) • [使用指南](#-使用指南)
 
 </div>
 
