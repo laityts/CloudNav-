@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
-  Pin, Settings, Lock, CloudCog, Github, GitFork, Home, LogIn, LogOut, User
+  Pin, Settings, Lock, CloudCog, Github, GitFork, Home, LogIn, LogOut, User,
+  GripVertical, Save
 } from 'lucide-react';
 import { LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, WebDavConfig, AIConfig } from './types';
 import { parseBookmarks } from './services/bookmarkParser';
@@ -76,6 +77,10 @@ function App() {
   // Sync State
   const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [authToken, setAuthToken] = useState<string>('');
+  
+  // Sorting State
+  const [sortingCategoryId, setSortingCategoryId] = useState<string | null>(null);
+  const [draggedLink, setDraggedLink] = useState<string | null>(null);
   
   // --- Helpers & Sync Logic ---
 
@@ -353,6 +358,74 @@ function App() {
       setIsBackupModalOpen(false);
   };
 
+  // --- Drag and Drop Sorting ---
+  const handleDragStart = (e: React.DragEvent, linkId: string) => {
+    e.dataTransfer.setData('text/plain', linkId);
+    setDraggedLink(linkId);
+    e.currentTarget.classList.add('opacity-50');
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.currentTarget.classList.add('bg-blue-50', 'dark:bg-blue-900/20');
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.currentTarget.classList.remove('bg-blue-50', 'dark:bg-blue-900/20');
+  };
+
+  const handleDrop = (e: React.DragEvent, targetLinkId: string) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('bg-blue-50', 'dark:bg-blue-900/20');
+    
+    const draggedLinkId = e.dataTransfer.getData('text/plain');
+    if (draggedLinkId === targetLinkId || !sortingCategoryId) return;
+    
+    // 重新排序链接
+    const categoryLinks = links.filter(link => link.categoryId === sortingCategoryId);
+    const otherLinks = links.filter(link => link.categoryId !== sortingCategoryId);
+    
+    const draggedIndex = categoryLinks.findIndex(link => link.id === draggedLinkId);
+    const targetIndex = categoryLinks.findIndex(link => link.id === targetLinkId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+    
+    const updatedCategoryLinks = [...categoryLinks];
+    const [draggedItem] = updatedCategoryLinks.splice(draggedIndex, 1);
+    updatedCategoryLinks.splice(targetIndex, 0, draggedItem);
+    
+    // 更新createdAt时间以保持新顺序
+    const now = Date.now();
+    const updatedWithNewTime = updatedCategoryLinks.map((link, index) => ({
+      ...link,
+      createdAt: now - index // 确保新顺序
+    }));
+    
+    const allLinks = [...otherLinks, ...updatedWithNewTime];
+    updateData(allLinks, categories);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    e.currentTarget.classList.remove('opacity-50');
+    setDraggedLink(null);
+  };
+
+  const toggleSorting = (categoryId: string) => {
+    if (!authToken) { 
+      setIsAuthOpen(true); 
+      return; 
+    }
+    
+    if (sortingCategoryId === categoryId) {
+      // 完成排序
+      setSortingCategoryId(null);
+      setDraggedLink(null);
+    } else {
+      // 开始排序
+      setSortingCategoryId(categoryId);
+    }
+  };
+
   // --- Filtering & Memo ---
 
   // Helper to check if a category is "Locked" (Has password AND not unlocked)
@@ -413,34 +486,55 @@ function App() {
 
   // --- Render Components ---
 
-  const renderLinkCard = (link: LinkItem) => (
-    <a
+  const renderLinkCard = (link: LinkItem, isSortingMode: boolean = false) => (
+    <div
         key={link.id}
-        href={link.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group relative flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 min-w-0" // 添加 min-w-0 防止文本溢出
-        title={link.description || link.url} // Native tooltip fallback
+        className={`group relative flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg transition-all duration-200 min-w-0 ${isSortingMode ? 'cursor-move' : 'cursor-pointer hover:-translate-y-0.5'}`}
+        draggable={isSortingMode}
+        onDragStart={(e) => isSortingMode && handleDragStart(e, link.id)}
+        onDragOver={(e) => isSortingMode && handleDragOver(e)}
+        onDragLeave={(e) => isSortingMode && handleDragLeave(e)}
+        onDrop={(e) => isSortingMode && handleDrop(e, link.id)}
+        onDragEnd={(e) => isSortingMode && handleDragEnd(e)}
     >
-        {/* Compact Icon */}
-        <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold uppercase shrink-0 flex-shrink-0">
-            {link.icon ? <img src={link.icon} alt="" className="w-5 h-5"/> : link.title.charAt(0)}
-        </div>
+        {/* 排序手柄 - 只在排序模式下显示 */}
+        {isSortingMode && (
+          <div className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-blue-500 cursor-grab active:cursor-grabbing mr-1">
+            <GripVertical size={16} />
+          </div>
+        )}
         
-        {/* Text Content - 加宽文本区域 */}
-        <div className="flex-1 min-w-0 overflow-hidden">
-            <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                {link.title}
-            </h3>
-            {link.description && (
-               <div className="tooltip-custom absolute left-0 -top-8 w-max max-w-[200px] bg-black text-white text-xs p-2 rounded opacity-0 invisible group-hover:visible group-hover:opacity-100 transition-all z-20 pointer-events-none truncate">
-                  {link.description}
-               </div>
-            )}
-        </div>
+        <a
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 flex items-center gap-3 min-w-0"
+          onClick={(e) => {
+            if (isSortingMode) {
+              e.preventDefault();
+            }
+          }}
+        >
+          {/* Compact Icon */}
+          <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold uppercase shrink-0 flex-shrink-0">
+              {link.icon ? <img src={link.icon} alt="" className="w-5 h-5"/> : link.title.charAt(0)}
+          </div>
+          
+          {/* Text Content - 加宽文本区域 */}
+          <div className="flex-1 min-w-0 overflow-hidden">
+              <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  {link.title}
+              </h3>
+              {link.description && (
+                <div className="tooltip-custom absolute left-0 -top-8 w-max max-w-[200px] bg-black text-white text-xs p-2 rounded opacity-0 invisible group-hover:visible group-hover:opacity-100 transition-all z-20 pointer-events-none truncate">
+                    {link.description}
+                </div>
+              )}
+          </div>
+        </a>
 
-        {/* Hover Actions - 只在登录状态显示 */}
-        {authToken && (
+        {/* Hover Actions - 只在登录状态且非排序模式下显示 */}
+        {authToken && !isSortingMode && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 bg-white/90 dark:bg-slate-800/90 pl-2">
               <button 
                   onClick={(e) => togglePin(link.id, e)}
@@ -465,45 +559,72 @@ function App() {
               </button>
           </div>
         )}
-    </a>
+    </div>
   );
 
-  const renderCategoryBlock = (category: any) => (
-    <section key={category.id} className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-            <Icon name={category.icon} size={16} />
+  const renderCategoryBlock = (category: any) => {
+    const isSortingMode = sortingCategoryId === category.id;
+    
+    return (
+      <section key={category.id} className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+              <Icon name={category.icon} size={16} />
+            </div>
+            <h3 className="text-lg font-semibold dark:text-slate-200">
+              {category.name}
+            </h3>
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              ({category.totalLinks})
+            </span>
+            
+            {/* 排序按钮 - 只在登录状态显示 */}
+            {authToken && category.totalLinks > 0 && (
+              <button
+                onClick={() => toggleSorting(category.id)}
+                className={`ml-2 p-1.5 rounded-lg transition-colors ${
+                  isSortingMode 
+                    ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                    : 'text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+                title={isSortingMode ? "完成排序" : "排序"}
+              >
+                {isSortingMode ? <Save size={16} /> : <GripVertical size={16} />}
+              </button>
+            )}
           </div>
-          <h3 className="text-lg font-semibold dark:text-slate-200">
-            {category.name}
-          </h3>
-          <span className="text-sm text-slate-500 dark:text-slate-400">
-            ({category.totalLinks})
-          </span>
+          
+          {category.hasMore && !isSortingMode && (
+            <button
+              onClick={() => handleCategoryClick(category)}
+              className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+            >
+              查看全部 →
+            </button>
+          )}
         </div>
-        {category.hasMore && (
-          <button
-            onClick={() => handleCategoryClick(category)}
-            className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
-          >
-            查看全部 →
-          </button>
+        
+        {isSortingMode && (
+          <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm rounded-lg flex items-center gap-2">
+            <GripVertical size={16} />
+            <span>拖拽链接卡片进行排序，完成后点击上方的保存按钮</span>
+          </div>
         )}
-      </div>
-      
-      {category.links.length > 0 ? (
-        // 电脑版加宽：减少列数，增加卡片宽度
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-          {category.links.map(link => renderLinkCard(link))}
-        </div>
-      ) : (
-        <div className="text-center py-8 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-          暂无链接
-        </div>
-      )}
-    </section>
-  );
+        
+        {category.links.length > 0 ? (
+          // 电脑版加宽：减少列数，增加卡片宽度
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+            {category.links.map(link => renderLinkCard(link, isSortingMode))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+            暂无链接
+          </div>
+        )}
+      </section>
+    );
+  };
 
 
   return (
@@ -748,7 +869,7 @@ function App() {
                         </h2>
                     </div>
                     {/* 电脑版加宽：减少列数，增加卡片宽度 */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
                         {pinnedLinks.map(link => renderLinkCard(link))}
                     </div>
                 </section>
@@ -824,7 +945,7 @@ function App() {
                         </div>
                      ) : (
                         // 电脑版加宽：减少列数，增加卡片宽度
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
                             {displayedLinks.map(link => renderLinkCard(link))}
                         </div>
                      )}
