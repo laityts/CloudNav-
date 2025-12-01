@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
-  Pin, Settings, Lock, CloudCog, Github, GitFork
+  Pin, Settings, Lock, CloudCog, Github, GitFork, Home, LogIn
 } from 'lucide-react';
 import { LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, WebDavConfig, AIConfig } from './types';
 import { parseBookmarks } from './services/bookmarkParser';
@@ -29,7 +28,7 @@ function App() {
   // --- State ---
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -55,8 +54,6 @@ function App() {
       }
       return {
           provider: 'gemini',
-          // Try to use injected env if available, else empty.
-          // Note: In client-side build process.env might need specific config, but we leave it as fallback.
           apiKey: process.env.API_KEY || '', 
           baseUrl: '',
           model: 'gemini-2.5-flash'
@@ -259,7 +256,7 @@ function App() {
   };
 
   const handleAddLink = (data: Omit<LinkItem, 'id' | 'createdAt'>) => {
-    if (!authToken) { setIsAuthOpen(true); return; }
+    // 登录后不再检查，直接添加
     const newLink: LinkItem = {
       ...data,
       id: Date.now().toString(),
@@ -271,7 +268,6 @@ function App() {
   };
 
   const handleEditLink = (data: Omit<LinkItem, 'id' | 'createdAt'>) => {
-    if (!authToken) { setIsAuthOpen(true); return; }
     if (!editingLink) return;
     const updated = links.map(l => l.id === editingLink.id ? { ...l, ...data } : l);
     updateData(updated, categories);
@@ -281,7 +277,6 @@ function App() {
   const handleDeleteLink = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!authToken) { setIsAuthOpen(true); return; }
     if (confirm('确定删除此链接吗?')) {
       updateData(links.filter(l => l.id !== id), categories);
     }
@@ -290,7 +285,6 @@ function App() {
   const togglePin = (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!authToken) { setIsAuthOpen(true); return; }
       const updated = links.map(l => l.id === id ? { ...l, pinned: !l.pinned } : l);
       updateData(updated, categories);
   };
@@ -303,12 +297,7 @@ function App() {
   // --- Category Management & Security ---
 
   const handleCategoryClick = (cat: Category) => {
-      // If category has password and is NOT unlocked
-      if (cat.password && !unlockedCategoryIds.has(cat.id)) {
-          setCatAuthModalData(cat);
-          setSidebarOpen(false);
-          return;
-      }
+      // 登录后可以直接访问，不再需要密码验证
       setSelectedCategory(cat.id);
       setSidebarOpen(false);
   };
@@ -319,12 +308,10 @@ function App() {
   };
 
   const handleUpdateCategories = (newCats: Category[]) => {
-      if (!authToken) { setIsAuthOpen(true); return; }
       updateData(links, newCats);
   };
 
   const handleDeleteCategory = (catId: string) => {
-      if (!authToken) { setIsAuthOpen(true); return; }
       const newCats = categories.filter(c => c.id !== catId);
       // Move links to common or first available
       const targetId = 'common'; 
@@ -363,6 +350,22 @@ function App() {
       return links.filter(l => l.pinned && !isCategoryLocked(l.categoryId));
   }, [links, categories, unlockedCategoryIds]);
 
+  // Home view: links grouped by category
+  const homeViewCategories = useMemo(() => {
+    return categories.filter(cat => !isCategoryLocked(cat.id)).map(cat => {
+      const catLinks = links
+        .filter(l => l.categoryId === cat.id && !l.pinned)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      
+      return {
+        ...cat,
+        links: catLinks.slice(0, 6), // Show max 6 links per category on home page
+        totalLinks: catLinks.length,
+        hasMore: catLinks.length > 6
+      };
+    });
+  }, [links, categories, unlockedCategoryIds]);
+
   const displayedLinks = useMemo(() => {
     let result = links;
     
@@ -380,7 +383,7 @@ function App() {
     }
 
     // Category Filter
-    if (selectedCategory !== 'all') {
+    if (selectedCategory !== 'home') {
       result = result.filter(l => l.categoryId === selectedCategory);
     }
     
@@ -416,31 +419,69 @@ function App() {
             )}
         </div>
 
-        {/* Hover Actions (Absolute Right or Flex) */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 bg-white/90 dark:bg-slate-800/90 pl-2">
-            <button 
-                onClick={(e) => togglePin(link.id, e)}
-                className={`p-1 rounded-md transition-colors ${link.pinned ? 'text-blue-500 bg-blue-50' : 'text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                title="置顶"
-            >
-                <Pin size={13} className={link.pinned ? "fill-current" : ""} />
-            </button>
-            <button 
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingLink(link); setIsModalOpen(true); }}
-                className="p-1 text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md"
-                title="编辑"
-            >
-                <Edit2 size={13} />
-            </button>
-            <button 
-                onClick={(e) => handleDeleteLink(link.id, e)}
-                className="p-1 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md"
-                title="删除"
-            >
-                <Trash2 size={13} />
-            </button>
-        </div>
+        {/* Hover Actions - 只在登录状态显示 */}
+        {authToken && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 bg-white/90 dark:bg-slate-800/90 pl-2">
+              <button 
+                  onClick={(e) => togglePin(link.id, e)}
+                  className={`p-1 rounded-md transition-colors ${link.pinned ? 'text-blue-500 bg-blue-50' : 'text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                  title="置顶"
+              >
+                  <Pin size={13} className={link.pinned ? "fill-current" : ""} />
+              </button>
+              <button 
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingLink(link); setIsModalOpen(true); }}
+                  className="p-1 text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md"
+                  title="编辑"
+              >
+                  <Edit2 size={13} />
+              </button>
+              <button 
+                  onClick={(e) => handleDeleteLink(link.id, e)}
+                  className="p-1 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md"
+                  title="删除"
+              >
+                  <Trash2 size={13} />
+              </button>
+          </div>
+        )}
     </a>
+  );
+
+  const renderCategoryBlock = (category: any) => (
+    <section key={category.id} className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+            <Icon name={category.icon} size={16} />
+          </div>
+          <h3 className="text-lg font-semibold dark:text-slate-200">
+            {category.name}
+          </h3>
+          <span className="text-sm text-slate-500 dark:text-slate-400">
+            ({category.totalLinks})
+          </span>
+        </div>
+        {category.hasMore && (
+          <button
+            onClick={() => handleCategoryClick(category)}
+            className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+          >
+            查看全部 →
+          </button>
+        )}
+      </div>
+      
+      {category.links.length > 0 ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+          {category.links.map(link => renderLinkCard(link))}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+          暂无链接
+        </div>
+      )}
+    </section>
   );
 
 
@@ -517,21 +558,21 @@ function App() {
         {/* Categories List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-hide">
             <button
-              onClick={() => { setSelectedCategory('all'); setSidebarOpen(false); }}
+              onClick={() => { setSelectedCategory('home'); setSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                selectedCategory === 'all' 
+                selectedCategory === 'home' 
                   ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' 
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}
             >
-              <div className="p-1"><Icon name="LayoutGrid" size={18} /></div>
-              <span>全部链接</span>
+              <div className="p-1"><Home size={18} /></div>
+              <span>主页</span>
             </button>
             
             <div className="flex items-center justify-between pt-4 pb-2 px-4">
                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">分类目录</span>
                <button 
-                  onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsCatManagerOpen(true); }}
+                  onClick={() => setIsCatManagerOpen(true)}
                   className="p-1 text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
                   title="管理分类"
                >
@@ -566,7 +607,7 @@ function App() {
             
             <div className="grid grid-cols-3 gap-2 mb-2">
                 <button 
-                    onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsImportModalOpen(true); }}
+                    onClick={() => setIsImportModalOpen(true)}
                     className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
                     title="导入书签"
                 >
@@ -575,7 +616,7 @@ function App() {
                 </button>
                 
                 <button 
-                    onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsBackupModalOpen(true); }}
+                    onClick={() => setIsBackupModalOpen(true)}
                     className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
                     title="备份与恢复"
                 >
@@ -642,14 +683,20 @@ function App() {
               {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
+            {/* 右上角登录图标按钮 */}
             {!authToken && (
-                <button onClick={() => setIsAuthOpen(true)} className="hidden sm:flex items-center gap-2 bg-slate-200 dark:bg-slate-700 px-3 py-1.5 rounded-full text-xs font-medium">
-                    <Cloud size={14} /> 登录
+                <button 
+                  onClick={() => setIsAuthOpen(true)} 
+                  className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"
+                  title="登录"
+                >
+                  <LogIn size={18} />
+                  <span className="hidden sm:inline text-sm font-medium">登录</span>
                 </button>
             )}
 
             <button
-              onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(undefined); setIsModalOpen(true); }}}
+              onClick={() => { setEditingLink(undefined); setIsModalOpen(true); }}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-full text-sm font-medium shadow-lg shadow-blue-500/30"
             >
               <Plus size={16} /> <span className="hidden sm:inline">添加</span>
@@ -661,7 +708,7 @@ function App() {
         <div className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-8">
             
             {/* 1. Pinned Area (Custom Top Area) */}
-            {pinnedLinks.length > 0 && !searchQuery && (selectedCategory === 'all') && (
+            {pinnedLinks.length > 0 && !searchQuery && selectedCategory === 'home' && (
                 <section>
                     <div className="flex items-center gap-2 mb-4">
                         <Pin size={16} className="text-blue-500 fill-blue-500" />
@@ -675,58 +722,81 @@ function App() {
                 </section>
             )}
 
-            {/* 2. Main Grid */}
-            <section>
-                 {(!pinnedLinks.length && !searchQuery && selectedCategory === 'all') && (
-                    <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg flex items-center justify-between">
-                         <div>
-                            <h1 className="text-xl font-bold">早安 👋</h1>
-                            <p className="text-sm opacity-90 mt-1">
-                                {links.length} 个链接 · {categories.length} 个分类
-                            </p>
-                         </div>
-                         <Icon name="Compass" size={48} className="opacity-20" />
-                    </div>
-                 )}
+            {/* 2. Main Content */}
+            {selectedCategory === 'home' && !searchQuery ? (
+                // Home Page View - Show by Category
+                <section>
+                    {homeViewCategories.length > 0 ? (
+                        <>
+                            {homeViewCategories.map(cat => renderCategoryBlock(cat))}
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                            <Home size={40} className="opacity-30 mb-4" />
+                            <p className="mb-2">暂无内容</p>
+                            <button 
+                                onClick={() => setIsModalOpen(true)} 
+                                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                            >
+                                添加第一个链接
+                            </button>
+                        </div>
+                    )}
+                </section>
+            ) : (
+                // Category or Search View
+                <section>
+                     {(!pinnedLinks.length && !searchQuery && selectedCategory === 'home') && (
+                        <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg flex items-center justify-between">
+                             <div>
+                                <h1 className="text-xl font-bold">早安 👋</h1>
+                                <p className="text-sm opacity-90 mt-1">
+                                    {links.length} 个链接 · {categories.length} 个分类
+                                </p>
+                             </div>
+                             <Icon name="Compass" size={48} className="opacity-20" />
+                        </div>
+                     )}
 
-                 <div className="flex items-center justify-between mb-4">
-                     <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                         {selectedCategory === 'all' 
-                            ? (searchQuery ? '搜索结果' : '所有链接') 
-                            : (
+                     <div className="flex items-center justify-between mb-4">
+                         <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                             {selectedCategory === 'home' 
+                                ? (searchQuery ? '搜索结果' : '所有链接') 
+                                : (
+                                    <>
+                                        {categories.find(c => c.id === selectedCategory)?.name}
+                                        {isCategoryLocked(selectedCategory) && <Lock size={14} className="text-amber-500" />}
+                                    </>
+                                )
+                             }
+                         </h2>
+                     </div>
+
+                     {displayedLinks.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                            {isCategoryLocked(selectedCategory) ? (
                                 <>
-                                    {categories.find(c => c.id === selectedCategory)?.name}
-                                    {isCategoryLocked(selectedCategory) && <Lock size={14} className="text-amber-500" />}
+                                    <Lock size={40} className="text-amber-400 mb-4" />
+                                    <p>该目录已锁定</p>
+                                    <button onClick={() => setCatAuthModalData(categories.find(c => c.id === selectedCategory) || null)} className="mt-4 px-4 py-2 bg-amber-500 text-white rounded-lg">输入密码解锁</button>
                                 </>
-                            )
-                         }
-                     </h2>
-                 </div>
-
-                 {displayedLinks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-                        {isCategoryLocked(selectedCategory) ? (
-                            <>
-                                <Lock size={40} className="text-amber-400 mb-4" />
-                                <p>该目录已锁定</p>
-                                <button onClick={() => setCatAuthModalData(categories.find(c => c.id === selectedCategory) || null)} className="mt-4 px-4 py-2 bg-amber-500 text-white rounded-lg">输入密码解锁</button>
-                            </>
-                        ) : (
-                            <>
-                                <Search size={40} className="opacity-30 mb-4" />
-                                <p>没有找到相关内容</p>
-                                {selectedCategory !== 'all' && (
-                                    <button onClick={() => setIsModalOpen(true)} className="mt-4 text-blue-500 hover:underline">添加一个?</button>
-                                )}
-                            </>
-                        )}
-                    </div>
-                 ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-                        {displayedLinks.map(link => renderLinkCard(link))}
-                    </div>
-                 )}
-            </section>
+                            ) : (
+                                <>
+                                    <Search size={40} className="opacity-30 mb-4" />
+                                    <p>没有找到相关内容</p>
+                                    {selectedCategory !== 'home' && (
+                                        <button onClick={() => setIsModalOpen(true)} className="mt-4 text-blue-500 hover:underline">添加一个?</button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                     ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+                            {displayedLinks.map(link => renderLinkCard(link))}
+                        </div>
+                     )}
+                </section>
+            )}
         </div>
       </main>
 
