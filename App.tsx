@@ -567,8 +567,8 @@ function App() {
     
     return (
       <section key={category.id} className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
               <Icon name={category.icon} size={16} />
             </div>
@@ -613,8 +613,8 @@ function App() {
         )}
         
         {category.links.length > 0 ? (
-          // 电脑版加宽：减少列数，增加卡片宽度
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+          // 响应式网格布局：手机端一行显示2个，平板3个，电脑4-5个
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             {category.links.map(link => renderLinkCard(link, isSortingMode))}
           </div>
         ) : (
@@ -868,8 +868,8 @@ function App() {
                             置顶 / 常用
                         </h2>
                     </div>
-                    {/* 电脑版加宽：减少列数，增加卡片宽度 */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                    {/* 响应式网格布局：手机端一行显示2个，平板3个，电脑4-6个 */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                         {pinnedLinks.map(link => renderLinkCard(link))}
                     </div>
                 </section>
@@ -944,8 +944,8 @@ function App() {
                             )}
                         </div>
                      ) : (
-                        // 电脑版加宽：减少列数，增加卡片宽度
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                        // 响应式网格布局：手机端一行显示2个，平板3个，电脑4-6个
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                             {displayedLinks.map(link => renderLinkCard(link))}
                         </div>
                      )}
