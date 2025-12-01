@@ -472,15 +472,21 @@ function App() {
           .filter(l => l.categoryId === cat.id && !l.pinned)
           .sort((a, b) => b.createdAt - a.createdAt);
         
+        // 如果当前正在对这个分类进行排序，显示全部链接
+        // 否则只显示前6个链接
+        const isSorting = sortingCategoryId === cat.id;
+        const displayLinks = isSorting ? catLinks : catLinks.slice(0, 6);
+        
         return {
           ...cat,
-          links: catLinks.slice(0, 6), // Show max 6 links per category on home page
+          links: displayLinks,
           totalLinks: catLinks.length,
-          hasMore: catLinks.length > 6
+          hasMore: catLinks.length > 6 && !isSorting, // 排序模式下不显示"查看全部"
+          isSorting: isSorting
         };
       })
       .filter(cat => cat.totalLinks > 0); // 只显示有链接的分类
-  }, [links, categories, unlockedCategoryIds]);
+  }, [links, categories, unlockedCategoryIds, sortingCategoryId]);
 
   const displayedLinks = useMemo(() => {
     let result = links;
