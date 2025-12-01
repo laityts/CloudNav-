@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
-  Pin, Settings, Lock, CloudCog, Github, GitFork, Home, LogIn
+  Pin, Settings, Lock, CloudCog, Github, GitFork, Home, LogIn, LogOut
 } from 'lucide-react';
 import { LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, WebDavConfig, AIConfig } from './types';
 import { parseBookmarks } from './services/bookmarkParser';
@@ -240,7 +240,15 @@ function App() {
       }
   };
 
+  const handleLogout = () => {
+    setAuthToken('');
+    localStorage.removeItem(AUTH_KEY);
+    setSyncStatus('idle');
+  };
+
   const handleImportConfirm = (newLinks: LinkItem[], newCategories: Category[]) => {
+      if (!authToken) { setIsAuthOpen(true); return; }
+      
       // Merge categories: Avoid duplicate names/IDs
       const mergedCategories = [...categories];
       newCategories.forEach(nc => {
@@ -256,7 +264,8 @@ function App() {
   };
 
   const handleAddLink = (data: Omit<LinkItem, 'id' | 'createdAt'>) => {
-    // 登录后不再检查，直接添加
+    if (!authToken) { setIsAuthOpen(true); return; }
+    
     const newLink: LinkItem = {
       ...data,
       id: Date.now().toString(),
@@ -268,6 +277,7 @@ function App() {
   };
 
   const handleEditLink = (data: Omit<LinkItem, 'id' | 'createdAt'>) => {
+    if (!authToken) { setIsAuthOpen(true); return; }
     if (!editingLink) return;
     const updated = links.map(l => l.id === editingLink.id ? { ...l, ...data } : l);
     updateData(updated, categories);
@@ -277,6 +287,7 @@ function App() {
   const handleDeleteLink = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!authToken) { setIsAuthOpen(true); return; }
     if (confirm('确定删除此链接吗?')) {
       updateData(links.filter(l => l.id !== id), categories);
     }
@@ -285,11 +296,13 @@ function App() {
   const togglePin = (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!authToken) { setIsAuthOpen(true); return; }
       const updated = links.map(l => l.id === id ? { ...l, pinned: !l.pinned } : l);
       updateData(updated, categories);
   };
 
   const handleSaveAIConfig = (config: AIConfig) => {
+      if (!authToken) { setIsAuthOpen(true); return; }
       setAiConfig(config);
       localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
   };
@@ -297,7 +310,7 @@ function App() {
   // --- Category Management & Security ---
 
   const handleCategoryClick = (cat: Category) => {
-      // 登录后可以直接访问，不再需要密码验证
+      // 查看分类全部链接不需要登录
       setSelectedCategory(cat.id);
       setSidebarOpen(false);
   };
@@ -308,10 +321,12 @@ function App() {
   };
 
   const handleUpdateCategories = (newCats: Category[]) => {
+      if (!authToken) { setIsAuthOpen(true); return; }
       updateData(links, newCats);
   };
 
   const handleDeleteCategory = (catId: string) => {
+      if (!authToken) { setIsAuthOpen(true); return; }
       const newCats = categories.filter(c => c.id !== catId);
       // Move links to common or first available
       const targetId = 'common'; 
@@ -327,11 +342,13 @@ function App() {
 
   // --- WebDAV Config ---
   const handleSaveWebDavConfig = (config: WebDavConfig) => {
+      if (!authToken) { setIsAuthOpen(true); return; }
       setWebDavConfig(config);
       localStorage.setItem(WEBDAV_CONFIG_KEY, JSON.stringify(config));
   };
 
   const handleRestoreBackup = (restoredLinks: LinkItem[], restoredCategories: Category[]) => {
+      if (!authToken) { setIsAuthOpen(true); return; }
       updateData(restoredLinks, restoredCategories);
       setIsBackupModalOpen(false);
   };
@@ -399,16 +416,16 @@ function App() {
         href={link.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="group relative flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+        className="group relative flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 min-w-0" // 添加 min-w-0 防止文本溢出
         title={link.description || link.url} // Native tooltip fallback
     >
         {/* Compact Icon */}
-        <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold uppercase shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold uppercase shrink-0 flex-shrink-0">
             {link.icon ? <img src={link.icon} alt="" className="w-5 h-5"/> : link.title.charAt(0)}
         </div>
         
-        {/* Text Content */}
-        <div className="flex-1 min-w-0">
+        {/* Text Content - 加宽文本区域 */}
+        <div className="flex-1 min-w-0 overflow-hidden">
             <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                 {link.title}
             </h3>
@@ -473,7 +490,8 @@ function App() {
       </div>
       
       {category.links.length > 0 ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+        // 电脑版加宽：减少列数，增加卡片宽度
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
           {category.links.map(link => renderLinkCard(link))}
         </div>
       ) : (
@@ -572,7 +590,7 @@ function App() {
             <div className="flex items-center justify-between pt-4 pb-2 px-4">
                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">分类目录</span>
                <button 
-                  onClick={() => setIsCatManagerOpen(true)}
+                  onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsCatManagerOpen(true); }}
                   className="p-1 text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
                   title="管理分类"
                >
@@ -607,7 +625,7 @@ function App() {
             
             <div className="grid grid-cols-3 gap-2 mb-2">
                 <button 
-                    onClick={() => setIsImportModalOpen(true)}
+                    onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsImportModalOpen(true); }}
                     className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
                     title="导入书签"
                 >
@@ -616,7 +634,7 @@ function App() {
                 </button>
                 
                 <button 
-                    onClick={() => setIsBackupModalOpen(true)}
+                    onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsBackupModalOpen(true); }}
                     className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
                     title="备份与恢复"
                 >
@@ -625,7 +643,7 @@ function App() {
                 </button>
 
                 <button 
-                    onClick={() => setIsSettingsModalOpen(true)}
+                    onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsSettingsModalOpen(true); }}
                     className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
                     title="AI 设置"
                 >
@@ -666,7 +684,8 @@ function App() {
               <Menu size={24} />
             </button>
 
-            <div className="relative w-full max-w-md hidden sm:block">
+            {/* 手机版搜索框 - 始终显示 */}
+            <div className="relative w-full max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
                 type="text"
@@ -683,20 +702,29 @@ function App() {
               {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            {/* 右上角登录图标按钮 */}
-            {!authToken && (
-                <button 
-                  onClick={() => setIsAuthOpen(true)} 
-                  className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"
-                  title="登录"
-                >
-                  <LogIn size={18} />
-                  <span className="hidden sm:inline text-sm font-medium">登录</span>
-                </button>
+            {/* 登录/登出按钮 */}
+            {!authToken ? (
+              <button 
+                onClick={() => setIsAuthOpen(true)} 
+                className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"
+                title="登录"
+              >
+                <LogIn size={18} />
+                <span className="hidden sm:inline text-sm font-medium">登录</span>
+              </button>
+            ) : (
+              <button 
+                onClick={handleLogout}
+                className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"
+                title="退出登录"
+              >
+                <LogOut size={18} />
+                <span className="hidden sm:inline text-sm font-medium">退出</span>
+              </button>
             )}
 
             <button
-              onClick={() => { setEditingLink(undefined); setIsModalOpen(true); }}
+              onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(undefined); setIsModalOpen(true); }}}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-full text-sm font-medium shadow-lg shadow-blue-500/30"
             >
               <Plus size={16} /> <span className="hidden sm:inline">添加</span>
@@ -716,7 +744,8 @@ function App() {
                             置顶 / 常用
                         </h2>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+                    {/* 电脑版加宽：减少列数，增加卡片宽度 */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                         {pinnedLinks.map(link => renderLinkCard(link))}
                     </div>
                 </section>
@@ -735,7 +764,7 @@ function App() {
                             <Home size={40} className="opacity-30 mb-4" />
                             <p className="mb-2">暂无内容</p>
                             <button 
-                                onClick={() => setIsModalOpen(true)} 
+                                onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsModalOpen(true); }} 
                                 className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                             >
                                 添加第一个链接
@@ -785,13 +814,14 @@ function App() {
                                     <Search size={40} className="opacity-30 mb-4" />
                                     <p>没有找到相关内容</p>
                                     {selectedCategory !== 'home' && (
-                                        <button onClick={() => setIsModalOpen(true)} className="mt-4 text-blue-500 hover:underline">添加一个?</button>
+                                        <button onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsModalOpen(true); }} className="mt-4 text-blue-500 hover:underline">添加一个?</button>
                                     )}
                                 </>
                             )}
                         </div>
                      ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+                        // 电脑版加宽：减少列数，增加卡片宽度
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                             {displayedLinks.map(link => renderLinkCard(link))}
                         </div>
                      )}
