@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check } from 'lucide-react';
+import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, Globe as GlobeIcon } from 'lucide-react';
 import { AIConfig, LinkItem } from '../types';
 import { generateLinkDescription } from '../services/geminiService';
 
@@ -11,13 +11,18 @@ interface SettingsModalProps {
   onSave: (config: AIConfig) => void;
   links: LinkItem[];
   onUpdateLinks: (links: LinkItem[]) => void;
+  siteName: string; // 新增：当前网站名称
+  onSiteNameChange: (name: string) => void; // 新增：修改网站名称的回调
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
-    isOpen, onClose, config, onSave, links, onUpdateLinks 
+    isOpen, onClose, config, onSave, links, onUpdateLinks, siteName, onSiteNameChange 
 }) => {
-  const [activeTab, setActiveTab] = useState<'ai' | 'tools'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'tools' | 'general'>('ai'); // 新增general标签页
   const [localConfig, setLocalConfig] = useState<AIConfig>(config);
+  
+  // 新增：网站名称状态
+  const [localSiteName, setLocalSiteName] = useState(siteName);
   
   // Bulk Generation State
   const [isProcessing, setIsProcessing] = useState(false);
@@ -35,6 +40,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setLocalConfig(config);
+      setLocalSiteName(siteName); // 初始化网站名称
       setIsProcessing(false);
       setProgress({ current: 0, total: 0 });
       shouldStopRef.current = false;
@@ -42,7 +48,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       const storedToken = localStorage.getItem('cloudnav_auth_token');
       if (storedToken) setPassword(storedToken);
     }
-  }, [isOpen, config]);
+  }, [isOpen, config, siteName]);
 
   const handleChange = (key: keyof AIConfig, value: string) => {
     setLocalConfig(prev => ({ ...prev, [key]: value }));
@@ -50,6 +56,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSave = () => {
     onSave(localConfig);
+    onSiteNameChange(localSiteName); // 保存网站名称
     onClose();
   };
 
@@ -262,6 +269,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <Bot size={18} /> AI 设置
               </button>
               <button 
+                onClick={() => setActiveTab('general')}
+                className={`text-sm font-semibold flex items-center gap-2 pb-1 transition-colors ${activeTab === 'general' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 dark:text-slate-400'}`}
+              >
+                <GlobeIcon size={18} /> 网站设置
+              </button>
+              <button 
                 onClick={() => setActiveTab('tools')}
                 className={`text-sm font-semibold flex items-center gap-2 pb-1 transition-colors ${activeTab === 'tools' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-500' : 'text-slate-500 dark:text-slate-400'}`}
               >
@@ -393,6 +406,46 @@ document.addEventListener('DOMContentLoaded', async () => {
                 </>
             )}
 
+            {activeTab === 'general' && (
+                <div className="space-y-6">
+                    <div className="space-y-4">
+                        <h4 className="font-medium dark:text-white mb-2 text-sm flex items-center gap-2">
+                            <GlobeIcon size={16} /> 网站基本设置
+                        </h4>
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">
+                                网站名称
+                            </label>
+                            <input
+                                type="text"
+                                value={localSiteName}
+                                onChange={(e) => setLocalSiteName(e.target.value)}
+                                className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                placeholder="请输入网站名称"
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1">
+                                网站名称将显示在浏览器标题栏和侧边栏中
+                            </p>
+                        </div>
+                        
+                        <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                                预览效果：
+                            </div>
+                            <div className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-600">
+                                <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
+                                    C
+                                </div>
+                                <span className="text-sm font-semibold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+                                    {localSiteName || "云航 CloudNav"}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'tools' && (
                 <div className="space-y-6">
                     <div className="space-y-3">
@@ -413,7 +466,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <Box size={16} /> Chrome 扩展 (弹窗选择版)
                         </h4>
                         <p className="text-xs text-slate-500 mb-4">
-                            在本地创建一个文件夹，创建以下 3 个文件，然后使用“加载已解压的扩展程序”安装。
+                            在本地创建一个文件夹，创建以下 3 个文件，然后使用"加载已解压的扩展程序"安装。
                             <br/>此扩展允许您点击图标后<strong>手动选择分类</strong>保存。
                         </p>
                         
@@ -472,17 +525,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         </div>
 
-        {activeTab === 'ai' && (
-            <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3 shrink-0">
-                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">取消</button>
-                <button 
-                    onClick={handleSave}
-                    className="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2 font-medium"
-                >
-                    <Save size={16} /> 保存设置
-                </button>
-            </div>
-        )}
+        <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3 shrink-0">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">取消</button>
+            <button 
+                onClick={handleSave}
+                className="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2 font-medium"
+            >
+                <Save size={16} /> 保存设置
+            </button>
+        </div>
       </div>
     </div>
   );

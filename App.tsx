@@ -24,6 +24,7 @@ const LOCAL_STORAGE_KEY = 'cloudnav_data_cache';
 const AUTH_KEY = 'cloudnav_auth_token';
 const WEBDAV_CONFIG_KEY = 'cloudnav_webdav_config';
 const AI_CONFIG_KEY = 'cloudnav_ai_config';
+const SITE_NAME_KEY = 'cloudnav_site_name'; // 新增：网站名称存储键
 
 function App() {
   // --- State ---
@@ -33,6 +34,11 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // 新增：网站名称状态
+  const [siteName, setSiteName] = useState<string>(() => {
+    return localStorage.getItem(SITE_NAME_KEY) || '云航 CloudNav';
+  });
   
   // Category Security State
   const [unlockedCategoryIds, setUnlockedCategoryIds] = useState<Set<string>>(new Set());
@@ -82,6 +88,77 @@ function App() {
   const [sortingCategoryId, setSortingCategoryId] = useState<string | null>(null);
   const [draggedLink, setDraggedLink] = useState<string | null>(null);
   
+  // --- Effects ---
+
+  useEffect(() => {
+    // Theme init
+    if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      setDarkMode(true);
+      document.documentElement.classList.add('dark');
+    }
+
+    // Load Token
+    const savedToken = localStorage.getItem(AUTH_KEY);
+    if (savedToken) setAuthToken(savedToken);
+
+    // Load WebDAV Config
+    const savedWebDav = localStorage.getItem(WEBDAV_CONFIG_KEY);
+    if (savedWebDav) {
+        try {
+            setWebDavConfig(JSON.parse(savedWebDav));
+        } catch (e) {}
+    }
+
+    // 设置网站标题
+    const savedSiteName = localStorage.getItem(SITE_NAME_KEY);
+    if (savedSiteName) {
+      document.title = savedSiteName;
+    }
+
+    // Handle URL Params for Bookmarklet (Add Link)
+    const urlParams = new URLSearchParams(window.location.search);
+    const addUrl = urlParams.get('add_url');
+    if (addUrl) {
+        const addTitle = urlParams.get('add_title') || '';
+        // Clean URL params to avoid re-triggering on refresh
+        window.history.replaceState({}, '', window.location.pathname);
+        
+        setPrefillLink({
+            title: addTitle,
+            url: addUrl,
+            categoryId: 'common' // Default, Modal will handle selection
+        });
+        setEditingLink(undefined);
+        setIsModalOpen(true);
+    }
+
+    // Initial Data Fetch
+    const initData = async () => {
+        try {
+            const res = await fetch('/api/storage');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.links && data.links.length > 0) {
+                    setLinks(data.links);
+                    setCategories(data.categories || DEFAULT_CATEGORIES);
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+                    return;
+                }
+            } 
+        } catch (e) {
+            console.warn("Failed to fetch from cloud, falling back to local.", e);
+        }
+        loadFromLocal();
+    };
+
+    initData();
+  }, []);
+
+  // 新增：更新网站标题的effect
+  useEffect(() => {
+    document.title = siteName;
+  }, [siteName]);
+
   // --- Helpers & Sync Logic ---
 
   const loadFromLocal = () => {
@@ -147,66 +224,6 @@ function App() {
       }
   };
 
-  // --- Effects ---
-
-  useEffect(() => {
-    // Theme init
-    if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setDarkMode(true);
-      document.documentElement.classList.add('dark');
-    }
-
-    // Load Token
-    const savedToken = localStorage.getItem(AUTH_KEY);
-    if (savedToken) setAuthToken(savedToken);
-
-    // Load WebDAV Config
-    const savedWebDav = localStorage.getItem(WEBDAV_CONFIG_KEY);
-    if (savedWebDav) {
-        try {
-            setWebDavConfig(JSON.parse(savedWebDav));
-        } catch (e) {}
-    }
-
-    // Handle URL Params for Bookmarklet (Add Link)
-    const urlParams = new URLSearchParams(window.location.search);
-    const addUrl = urlParams.get('add_url');
-    if (addUrl) {
-        const addTitle = urlParams.get('add_title') || '';
-        // Clean URL params to avoid re-triggering on refresh
-        window.history.replaceState({}, '', window.location.pathname);
-        
-        setPrefillLink({
-            title: addTitle,
-            url: addUrl,
-            categoryId: 'common' // Default, Modal will handle selection
-        });
-        setEditingLink(undefined);
-        setIsModalOpen(true);
-    }
-
-    // Initial Data Fetch
-    const initData = async () => {
-        try {
-            const res = await fetch('/api/storage');
-            if (res.ok) {
-                const data = await res.json();
-                if (data.links && data.links.length > 0) {
-                    setLinks(data.links);
-                    setCategories(data.categories || DEFAULT_CATEGORIES);
-                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
-                    return;
-                }
-            } 
-        } catch (e) {
-            console.warn("Failed to fetch from cloud, falling back to local.", e);
-        }
-        loadFromLocal();
-    };
-
-    initData();
-  }, []);
-
   const toggleTheme = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
@@ -220,6 +237,12 @@ function App() {
   };
 
   // --- Actions ---
+
+  // 新增：修改网站名称的处理函数
+  const handleSiteNameChange = (newName: string) => {
+    setSiteName(newName);
+    localStorage.setItem(SITE_NAME_KEY, newName);
+  };
 
   const handleLogin = async (password: string): Promise<boolean> => {
       try {
@@ -672,6 +695,8 @@ function App() {
         onSave={handleSaveAIConfig}
         links={links}
         onUpdateLinks={(newLinks) => updateData(newLinks, categories)}
+        siteName={siteName} // 传递网站名称
+        onSiteNameChange={handleSiteNameChange} // 传递修改网站名称的回调
       />
 
       {/* Sidebar Mobile Overlay */}
@@ -693,7 +718,7 @@ function App() {
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-slate-100 dark:border-slate-700 shrink-0">
             <span className="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-              云航 CloudNav
+              {siteName}
             </span>
         </div>
 
@@ -769,7 +794,7 @@ function App() {
                 <button 
                     onClick={() => { if(!authToken) setIsAuthOpen(true); else setIsSettingsModalOpen(true); }}
                     className="flex flex-col items-center justify-center gap-1 p-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-all"
-                    title="AI 设置"
+                    title="设置"
                 >
                     <Settings size={14} />
                     <span>设置</span>

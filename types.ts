@@ -20,6 +20,7 @@ export interface AppState {
   links: LinkItem[];
   categories: Category[];
   darkMode: boolean;
+  siteName?: string; // 新增：网站名称
 }
 
 export interface WebDavConfig {
@@ -36,6 +37,12 @@ export interface AIConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+}
+
+// 新增：网站配置类型
+export interface SiteConfig {
+  name: string;
+  title: string;
 }
 
 export const DEFAULT_CATEGORIES: Category[] = [
