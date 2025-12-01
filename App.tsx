@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
-  Pin, Settings, Lock, CloudCog, Github, GitFork, Home, LogIn, LogOut
+  Pin, Settings, Lock, CloudCog, Github, GitFork, Home, LogIn, LogOut, User
 } from 'lucide-react';
 import { LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, WebDavConfig, AIConfig } from './types';
 import { parseBookmarks } from './services/bookmarkParser';
@@ -369,18 +369,21 @@ function App() {
 
   // Home view: links grouped by category
   const homeViewCategories = useMemo(() => {
-    return categories.filter(cat => !isCategoryLocked(cat.id)).map(cat => {
-      const catLinks = links
-        .filter(l => l.categoryId === cat.id && !l.pinned)
-        .sort((a, b) => b.createdAt - a.createdAt);
-      
-      return {
-        ...cat,
-        links: catLinks.slice(0, 6), // Show max 6 links per category on home page
-        totalLinks: catLinks.length,
-        hasMore: catLinks.length > 6
-      };
-    });
+    return categories
+      .filter(cat => !isCategoryLocked(cat.id))
+      .map(cat => {
+        const catLinks = links
+          .filter(l => l.categoryId === cat.id && !l.pinned)
+          .sort((a, b) => b.createdAt - a.createdAt);
+        
+        return {
+          ...cat,
+          links: catLinks.slice(0, 6), // Show max 6 links per category on home page
+          totalLinks: catLinks.length,
+          hasMore: catLinks.length > 6
+        };
+      })
+      .filter(cat => cat.totalLinks > 0); // 只显示有链接的分类
   }, [links, categories, unlockedCategoryIds]);
 
   const displayedLinks = useMemo(() => {
@@ -702,15 +705,15 @@ function App() {
               {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            {/* 登录/登出按钮 */}
+            {/* 登录/登出按钮 - 使用不同图标和颜色区分 */}
             {!authToken ? (
               <button 
                 onClick={() => setIsAuthOpen(true)} 
                 className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"
                 title="登录"
               >
-                <LogIn size={18} />
-                <span className="hidden sm:inline text-sm font-medium">登录</span>
+                <LogIn size={18} className="text-blue-500" />
+                <span className="hidden sm:inline text-sm font-medium text-blue-500">登录</span>
               </button>
             ) : (
               <button 
@@ -718,8 +721,8 @@ function App() {
                 className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1"
                 title="退出登录"
               >
-                <LogOut size={18} />
-                <span className="hidden sm:inline text-sm font-medium">退出</span>
+                <User size={18} className="text-green-500" />
+                <span className="hidden sm:inline text-sm font-medium text-green-500">已登录</span>
               </button>
             )}
 
