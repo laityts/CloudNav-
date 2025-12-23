@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, List, GripVertical, Filter, LayoutTemplate, RefreshCw, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu } from 'lucide-react';
+import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, List, GripVertical, Filter, LayoutTemplate, RefreshCw, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu, Grip } from 'lucide-react';
 import { AIConfig, LinkItem, Category, SiteSettings } from '../types';
 import { generateLinkDescription } from '../services/geminiService';
 import JSZip from 'jszip';
@@ -59,7 +59,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   
   const [localSiteSettings, setLocalSiteSettings] = useState<SiteSettings>(() => ({
       title: siteSettings?.title || 'CloudNav - 我的导航',
-      navTitle: siteSettings?.navTitle || 'CloudNav',
+      navTitle: siteSettings?.navTitle || '云航 CloudNav',
       favicon: siteSettings?.favicon || '',
       cardStyle: siteSettings?.cardStyle || 'detailed'
   }));
@@ -79,6 +79,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // Link Management State
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [touchStart, setTouchStart] = useState<{ y: number, id: string } | null>(null);
+  const [dragging, setDragging] = useState(false);
   
   const availableCategories = useMemo(() => {
       const catIds = Array.from(new Set(links.map(l => l.categoryId)));
@@ -103,7 +105,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setLocalConfig(config);
       const safeSettings = {
           title: siteSettings?.title || 'CloudNav - 我的导航',
-          navTitle: siteSettings?.navTitle || 'CloudNav',
+          navTitle: siteSettings?.navTitle || '云航 CloudNav',
           favicon: siteSettings?.favicon || '',
           cardStyle: siteSettings?.cardStyle || 'detailed'
       };
@@ -121,6 +123,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       if (storedToken) setPassword(storedToken);
       setDraggedId(null);
       setFilterCategory('all');
+      setDragging(false);
+      setTouchStart(null);
     }
   }, [isOpen, config, siteSettings]);
 
@@ -197,13 +201,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       URL.revokeObjectURL(url);
   };
 
+  // 桌面端拖拽
   const handleDragStart = (e: React.DragEvent, id: string) => {
       setDraggedId(id);
+      setDragging(true);
       e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData('text/plain', id);
   };
 
-  const handleDragOver = (e: React.DragEvent, targetId: string) => {
-      e.preventDefault(); 
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+      e.preventDefault();
       if (!draggedId || draggedId === targetId) return;
       
       const newLinks = [...links];
@@ -216,11 +228,73 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       newLinks.splice(targetIndex, 0, movedItem);
       
       onUpdateLinks(newLinks);
+      setDraggedId(null);
+      setDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-      e.preventDefault();
-      setDraggedId(null);
+  // 移动端触摸拖拽 - 修复版
+  const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    setTouchStart({ y: touch.clientY, id });
+    setDraggedId(id);
+    setDragging(true);
+    
+    // 添加拖动样式
+    e.currentTarget.classList.add('dragging-mobile');
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart || !draggedId || e.touches.length !== 1) return;
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    const deltaY = touch.clientY - touchStart.y;
+    
+    // 如果移动超过阈值，开始拖拽
+    if (Math.abs(deltaY) > 20) {
+      const filtered = filterCategory === 'all' ? links : links.filter(l => l.categoryId === filterCategory);
+      const currentIndex = filtered.findIndex(l => l.id === draggedId);
+      
+      // 计算新位置
+      let newIndex = currentIndex;
+      if (deltaY > 30 && currentIndex < filtered.length - 1) {
+        newIndex = currentIndex + 1;
+      } else if (deltaY < -30 && currentIndex > 0) {
+        newIndex = currentIndex - 1;
+      }
+      
+      if (newIndex !== currentIndex) {
+        // 重新排序
+        const newFiltered = [...filtered];
+        const [movedItem] = newFiltered.splice(currentIndex, 1);
+        newFiltered.splice(newIndex, 0, movedItem);
+        
+        // 更新原始列表
+        if (filterCategory === 'all') {
+          onUpdateLinks(newFiltered);
+        } else {
+          const otherLinks = links.filter(l => l.categoryId !== filterCategory);
+          onUpdateLinks([...otherLinks, ...newFiltered]);
+        }
+        
+        // 更新触摸起始位置
+        setTouchStart({ y: touch.clientY, id: draggedId });
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.preventDefault();
+    setDraggedId(null);
+    setDragging(false);
+    setTouchStart(null);
+    
+    // 移除拖动样式
+    const elements = document.querySelectorAll('.dragging-mobile');
+    elements.forEach(el => el.classList.remove('dragging-mobile'));
   };
 
   const filteredLinks = useMemo(() => {
@@ -1067,16 +1141,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                              {filteredLinks.length === 0 ? (
                                  <div className="text-center py-10 text-slate-400 text-sm">暂无链接</div>
                              ) : (
-                                 filteredLinks.map(link => (
+                                 filteredLinks.map((link, index) => (
                                     <div 
                                         key={link.id}
                                         draggable
                                         onDragStart={(e) => handleDragStart(e, link.id)}
-                                        onDragOver={(e) => handleDragOver(e, link.id)}
-                                        onDrop={handleDrop}
-                                        className={`flex items-center gap-3 p-3 bg-white dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 ${draggedId === link.id ? 'opacity-50 border-blue-400 border-dashed' : 'hover:border-blue-300'}`}
+                                        onDragOver={handleDragOver}
+                                        onDrop={(e) => handleDrop(e, link.id)}
+                                        onTouchStart={(e) => handleTouchStart(e, link.id)}
+                                        onTouchMove={handleTouchMove}
+                                        onTouchEnd={handleTouchEnd}
+                                        className={`flex items-center gap-3 p-3 bg-white dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 transition-all touch-manipulation ${
+                                            draggedId === link.id ? 'opacity-50 border-blue-400 border-dashed scale-95 shadow-lg' : 
+                                            dragging ? 'hover:border-blue-300 active:scale-[0.98]' : 'hover:border-blue-300'
+                                        }`}
+                                        style={draggedId === link.id ? { transform: 'scale(0.95)' } : {}}
                                     >
-                                        <div className="cursor-move text-slate-400 hover:text-slate-600">
+                                        <div className="cursor-move text-slate-400 hover:text-slate-600 select-none touch-none">
                                             <GripVertical size={16} />
                                         </div>
                                         <div className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-600 flex items-center justify-center text-xs overflow-hidden">
@@ -1092,6 +1173,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     </div>
                                  ))
                              )}
+                        </div>
+                        
+                        {/* 移动端拖拽提示 */}
+                        <div className="pt-4 border-t border-slate-200 dark:border-slate-700 mt-4">
+                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                <MousePointerClick size={12} />
+                                <span>提示：在移动端长按并拖动链接可以调整顺序</span>
+                            </div>
                         </div>
                     </div>
                 )}

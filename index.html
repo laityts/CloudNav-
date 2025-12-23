@@ -38,6 +38,84 @@
           transition: opacity 0.2s, visibility 0.2s;
           pointer-events: none;
       }
+      /* 移动端拖拽样式 */
+      .dragging-mobile {
+          transform: scale(0.98) !important;
+          opacity: 0.7 !important;
+          transition: transform 0.2s ease, opacity 0.2s ease;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+          z-index: 10;
+          position: relative;
+      }
+      /* 防止移动端文本选择 */
+      .no-select {
+          user-select: none;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+      }
+      /* 改善移动端触摸反馈 */
+      @media (max-width: 768px) {
+          [draggable="true"] {
+              touch-action: pan-y;
+          }
+      }
+      /* 自定义动画类 */
+      .animate-in {
+          animation-duration: 300ms;
+          animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .fade-in {
+          animation-name: fadeIn;
+      }
+      .zoom-in {
+          animation-name: zoomIn;
+      }
+      .slide-in-from-left-2 {
+          animation-name: slideInFromLeft;
+      }
+      @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+      }
+      @keyframes zoomIn {
+          from { transform: scale(0.95); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+      }
+      @keyframes slideInFromLeft {
+          from { transform: translateX(-10px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+      }
+      /* 改善滚动体验 */
+      .scroll-smooth {
+          scroll-behavior: smooth;
+      }
+      /* 自定义工具提示 */
+      [title] {
+          position: relative;
+      }
+      [title]:hover::after {
+          content: attr(title);
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0, 0, 0, 0.8);
+          color: white;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          white-space: nowrap;
+          z-index: 1000;
+          pointer-events: none;
+      }
+      /* 改善移动端点击区域 */
+      @media (max-width: 640px) {
+          .touch-target {
+              min-height: 44px;
+              min-width: 44px;
+          }
+      }
     </style>
   <script type="importmap">
 {

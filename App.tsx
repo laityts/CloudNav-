@@ -4,7 +4,9 @@ import {
   Search, Plus, Upload, Moon, Sun, Menu, 
   Trash2, Edit2, Loader2, Cloud, CheckCircle2, AlertCircle,
   Pin, Settings, Lock, CloudCog, Github, GitFork, MoreVertical,
-  QrCode, Copy, LayoutGrid, List, Check, ExternalLink, ArrowRight
+  QrCode, Copy, LayoutGrid, List, Check, ExternalLink, ArrowRight,
+  ChevronDown, ChevronUp, Home, Grid2X2, Grid3X3, Maximize2, Minimize2,
+  MoreHorizontal, Eye, EyeOff, GripVertical
 } from 'lucide-react';
 import { 
     LinkItem, Category, DEFAULT_CATEGORIES, INITIAL_LINKS, 
@@ -63,12 +65,17 @@ function App() {
   
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-  // Context Menu State
+  // Context Menu State - 移动端触摸支持
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, link: LinkItem | null } | null>(null);
+  const [touchTimer, setTouchTimer] = useState<NodeJS.Timeout | null>(null);
+  const [touchStart, setTouchStart] = useState<{ x: number, y: number, time: number } | null>(null);
   
   const [qrCodeLink, setQrCodeLink] = useState<LinkItem | null>(null);
 
   const [unlockedCategoryIds, setUnlockedCategoryIds] = useState<Set<string>>(new Set());
+
+  // 新增：控制分类是否展开的状态
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const [webDavConfig, setWebDavConfig] = useState<WebDavConfig>({
       url: '',
@@ -311,6 +318,19 @@ function App() {
     }
   };
 
+  // 切换分类展开状态
+  const toggleCategoryExpand = (catId: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(catId)) {
+        newSet.delete(catId);
+      } else {
+        newSet.add(catId);
+      }
+      return newSet;
+    });
+  };
+
   // --- Handlers ---
   const handleLogin = async (password: string): Promise<boolean> => {
       try {
@@ -468,6 +488,51 @@ function App() {
       return !unlockedCategoryIds.has(catId);
   };
 
+  // 移动端触摸长按触发右键菜单
+  const handleLinkTouchStart = (e: React.TouchEvent, link: LinkItem) => {
+    if (e.touches.length !== 1) return;
+    
+    const touch = e.touches[0];
+    setTouchStart({
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    });
+    
+    // 设置长按计时器
+    const timer = setTimeout(() => {
+      showContextMenu(touch.clientX, touch.clientY, link);
+      setTouchTimer(null);
+    }, 800); // 800ms长按触发
+    
+    setTouchTimer(timer);
+  };
+
+  const handleLinkTouchMove = (e: React.TouchEvent) => {
+    // 如果移动了手指，取消长按计时器
+    if (touchTimer) {
+      clearTimeout(touchTimer);
+      setTouchTimer(null);
+    }
+  };
+
+  const handleLinkTouchEnd = () => {
+    // 取消长按计时器
+    if (touchTimer) {
+      clearTimeout(touchTimer);
+      setTouchTimer(null);
+    }
+    setTouchStart(null);
+  };
+
+  const showContextMenu = (x: number, y: number, link: LinkItem) => {
+    // 边界调整
+    if (x + 180 > window.innerWidth) x = window.innerWidth - 190;
+    if (y + 220 > window.innerHeight) y = window.innerHeight - 230;
+    
+    setContextMenu({ x, y, link });
+  };
+
   const pinnedLinks = useMemo(() => {
       return links.filter(l => l.pinned && !isCategoryLocked(l.categoryId));
   }, [links, categories, unlockedCategoryIds]);
@@ -510,11 +575,9 @@ function App() {
       const isSimple = siteSettings.cardStyle === 'simple';
 
       return (
-        <a
+        <div
             key={link.id}
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
+            className={`group relative flex flex-col ${isSimple ? 'p-2' : 'p-3'} bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:border-blue-200 dark:hover:border-slate-600 hover:-translate-y-0.5 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-750 touch-manipulation`}
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -526,14 +589,31 @@ function App() {
                 setContextMenu({ x, y, link });
                 return false;
             }}
-            className={`group relative flex flex-col ${isSimple ? 'p-2' : 'p-3'} bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:border-blue-200 dark:hover:border-slate-600 hover:-translate-y-0.5 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-750`}
-            title={link.description || link.url}
+            onTouchStart={(e) => handleLinkTouchStart(e, link)}
+            onTouchMove={handleLinkTouchMove}
+            onTouchEnd={handleLinkTouchEnd}
+            onClick={() => {
+              // 防止短按触发长按菜单
+              if (touchStart && Date.now() - touchStart.time < 500) {
+                window.open(link.url, '_blank', 'noopener,noreferrer');
+              }
+            }}
         >
+            <a
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute inset-0 z-10"
+                title={link.description || link.url}
+            >
+              <span className="sr-only">打开链接: {link.title}</span>
+            </a>
+            
             <div className={`flex items-center gap-3 ${isSimple ? '' : 'mb-1.5'} pr-6`}>
                 <div className={`${isSimple ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'} rounded-lg bg-slate-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold uppercase shrink-0 overflow-hidden`}>
                     {iconDisplay}
                 </div>
-                <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                <h3 className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors min-w-0">
                     {link.title}
                 </h3>
             </div>
@@ -542,38 +622,52 @@ function App() {
                     {link.description || <span className="opacity-0">.</span>}
                 </div>
             )}
-        </a>
+            
+            {/* 移动端长按提示 */}
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity md:hidden">
+              <MoreHorizontal size={14} className="text-slate-400" />
+            </div>
+        </div>
       );
   };
 
   return (
     <div className="flex h-screen overflow-hidden text-slate-900 dark:text-slate-50">
       
-      {/* Right Click Context Menu */}
+      {/* Right Click & Touch Context Menu */}
       {contextMenu && (
           <div 
              ref={contextMenuRef}
-             className="fixed z-[9999] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-100 dark:border-slate-600 w-44 py-2 flex flex-col animate-in fade-in zoom-in duration-100 overflow-hidden"
+             className="fixed z-[9999] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-100 dark:border-slate-600 w-48 py-2 flex flex-col animate-in fade-in zoom-in duration-100 overflow-hidden touch-none"
              style={{ top: contextMenu.y, left: contextMenu.x }}
              onClick={(e) => e.stopPropagation()}
              onContextMenu={(e) => e.preventDefault()}
+             onTouchStart={(e) => e.stopPropagation()}
           >
-             <button onClick={() => { handleCopyLink(contextMenu.link!.url); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
+             <button onClick={() => { handleCopyLink(contextMenu.link!.url); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left touch-pan-y">
                  <Copy size={16} className="text-slate-400"/> <span>复制链接</span>
              </button>
-             <button onClick={() => { setQrCodeLink(contextMenu.link); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
+             <button onClick={() => { setQrCodeLink(contextMenu.link); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left touch-pan-y">
                  <QrCode size={16} className="text-slate-400"/> <span>显示二维码</span>
              </button>
              <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-2"/>
-             <button onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(contextMenu.link!); setIsModalOpen(true); setContextMenu(null); }}} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
+             <button onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(contextMenu.link!); setIsModalOpen(true); setContextMenu(null); }}} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left touch-pan-y">
                  <Edit2 size={16} className="text-slate-400"/> <span>编辑链接</span>
              </button>
-             <button onClick={() => { togglePin(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
+             <button onClick={() => { togglePin(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left touch-pan-y">
                  <Pin size={16} className={contextMenu.link!.pinned ? "fill-current text-blue-500" : "text-slate-400"}/> <span>{contextMenu.link!.pinned ? '取消置顶' : '置顶'}</span>
              </button>
              <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-2"/>
-             <button onClick={() => { handleDeleteLink(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors text-left">
+             <button onClick={() => { handleDeleteLink(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors text-left touch-pan-y">
                  <Trash2 size={16}/> <span>删除链接</span>
+             </button>
+             
+             {/* 移动端关闭按钮 */}
+             <button 
+               onClick={() => setContextMenu(null)}
+               className="md:hidden mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 text-center text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+             >
+               关闭
              </button>
           </div>
       )}
@@ -581,7 +675,7 @@ function App() {
       {/* QR Code Modal */}
       {qrCodeLink && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setQrCodeLink(null)}>
-              <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+              <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200 max-w-[90vw]" onClick={e => e.stopPropagation()}>
                   <h3 className="font-bold text-lg text-slate-800">{qrCodeLink.title}</h3>
                   <div className="p-2 border border-slate-200 rounded-lg">
                     <img 
@@ -590,7 +684,13 @@ function App() {
                         className="w-48 h-48"
                     />
                   </div>
-                  <p className="text-xs text-slate-500 max-w-[200px] truncate">{qrCodeLink.url}</p>
+                  <p className="text-xs text-slate-500 max-w-full break-words px-2 text-center">{qrCodeLink.url}</p>
+                  <button 
+                    onClick={() => setQrCodeLink(null)}
+                    className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium"
+                  >
+                    关闭
+                  </button>
               </div>
           </div>
       )}
@@ -656,6 +756,7 @@ function App() {
         <div 
           className="fixed inset-0 z-20 bg-black/50 lg:hidden backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
+          onTouchStart={() => setSidebarOpen(false)}
         />
       )}
 
@@ -689,8 +790,8 @@ function App() {
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
             >
-              <div className="p-1"><Icon name="LayoutGrid" size={18} /></div>
-              <span>全部链接</span>
+              <div className="p-1"><Home size={18} /></div>
+              <span>主页</span>
             </button>
             
             <div className="flex items-center justify-between pt-4 pb-2 px-4">
@@ -779,7 +880,7 @@ function App() {
 
       <main 
           ref={mainRef}
-          className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-y-auto relative scroll-smooth"
+          className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-y-auto relative scroll-smooth touch-pan-y"
       >
         <header className="h-16 px-4 lg:px-8 flex items-center justify-between bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shrink-0">
           <div className="flex items-center gap-4 flex-1">
@@ -788,8 +889,8 @@ function App() {
             </button>
 
             {/* Redesigned Search Bar */}
-            <div className="relative w-full max-w-xl hidden sm:flex items-center gap-3">
-                {/* Search Mode Toggle (Pill) */}
+            <div className="relative w-full max-w-xl flex items-center gap-3">
+                {/* Search Mode Toggle (Pill) - 移动端也显示 */}
                 <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-full flex items-center shrink-0">
                     <button
                         onClick={() => setSearchMode('local')}
@@ -824,8 +925,8 @@ function App() {
                     </button>
                 )}
 
-                {/* Search Input */}
-                <form onSubmit={handleSearchSubmit} className="flex-1 relative flex items-center group">
+                {/* Search Input - 移动端隐藏 */}
+                <form onSubmit={handleSearchSubmit} className="flex-1 relative flex items-center group hidden sm:flex">
                     <input
                         ref={searchInputRef}
                         type="text"
@@ -855,20 +956,21 @@ function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden md:flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1 mr-2">
+            {/* 移动端简约/详细模式切换 - 现在移动端也显示 */}
+            <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1 mr-2">
                 <button 
                     onClick={() => authToken && updateData(links, categories, { ...siteSettings, cardStyle: 'simple' })}
                     title="简约模式"
                     className={`p-1.5 rounded transition-all ${siteSettings.cardStyle === 'simple' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                 >
-                    <LayoutGrid size={16} />
+                    <Grid2X2 size={16} />
                 </button>
                 <button 
                     onClick={() => authToken && updateData(links, categories, { ...siteSettings, cardStyle: 'detailed' })}
                     title="详情模式"
                     className={`p-1.5 rounded transition-all ${siteSettings.cardStyle === 'detailed' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                 >
-                    <List size={16} />
+                    <Grid3X3 size={16} />
                 </button>
             </div>
 
@@ -891,6 +993,24 @@ function App() {
           </div>
         </header>
 
+        {/* 移动端搜索输入框 */}
+        <div className="sm:hidden px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+            <form onSubmit={handleSearchSubmit} className="relative flex items-center">
+                <input
+                    type="text"
+                    placeholder={searchMode === 'local' ? "搜索书签..." : `在 ${activeExternalEngine?.name} 搜索...`}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-4 pr-10 py-2 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-full text-sm dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-500/50"
+                />
+                {searchQuery && (
+                    <button type="submit" className="absolute right-2 p-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 rounded-full hover:bg-blue-200 transition-colors">
+                        <ArrowRight size={14} />
+                    </button>
+                )}
+            </form>
+        </div>
+
         <div className="p-4 lg:p-8 space-y-8">
             
             {pinnedLinks.length > 0 && !searchQuery && (
@@ -901,7 +1021,7 @@ function App() {
                             置顶 / 常用
                         </h2>
                     </div>
-                    <div className={`grid gap-3 ${siteSettings.cardStyle === 'simple' ? 'grid-cols-2 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10' : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'}`}>
+                    <div className={`grid gap-3 ${siteSettings.cardStyle === 'simple' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6' : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'}`}>
                         {pinnedLinks.map(link => renderLinkCard(link))}
                     </div>
                 </section>
@@ -910,25 +1030,52 @@ function App() {
             {categories.map(cat => {
                 let catLinks = searchResults.filter(l => l.categoryId === cat.id);
                 const isLocked = cat.password && !unlockedCategoryIds.has(cat.id);
+                const isExpanded = expandedCategories.has(cat.id) || searchQuery || activeCategory === cat.id;
                 
-                // Logic Fix: If External Search, do NOT hide categories based on links
-                // Because external search doesn't filter links.
-                // However, the user probably wants to see the links grid even when typing for external search
-                // Current logic: if search query exists AND local search -> filter. 
-                // If search query exists AND external search -> show all (searchResults returns all).
-                
+                // 如果不是置顶分类，且有搜索词且在本地搜索模式下，才进行筛选
                 if (searchQuery && searchMode === 'local' && catLinks.length === 0) return null;
+
+                // 计算要显示的链接数量：如果展开或搜索中显示全部，否则最多显示6个
+                const displayLinks = isExpanded 
+                    ? catLinks 
+                    : catLinks.slice(0, 6);
 
                 return (
                     <section key={cat.id} id={`cat-${cat.id}`} className="scroll-mt-24">
-                        <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
-                             <div className="text-slate-400">
-                                {cat.icon && cat.icon.length <= 4 && !/^[a-zA-Z]+$/.test(cat.icon) ? <span className="text-lg">{cat.icon}</span> : <Icon name={cat.icon} size={20} />}
-                             </div>
-                             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200">
-                                 {cat.name}
-                             </h2>
-                             {isLocked && <Lock size={16} className="text-amber-500" />}
+                        <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
+                            <div className="flex items-center gap-2 flex-1">
+                                 <div className="text-slate-400">
+                                    {cat.icon && cat.icon.length <= 4 && !/^[a-zA-Z]+$/.test(cat.icon) ? <span className="text-lg">{cat.icon}</span> : <Icon name={cat.icon} size={20} />}
+                                 </div>
+                                 <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200">
+                                     {cat.name}
+                                 </h2>
+                                 {isLocked && <Lock size={16} className="text-amber-500" />}
+                                 {!isLocked && catLinks.length > 0 && (
+                                     <span className="text-sm text-slate-500 dark:text-slate-400 ml-2">
+                                         ({catLinks.length})
+                                     </span>
+                                 )}
+                            </div>
+                            
+                            {/* 显示所有链接的开关 - 只在有多个链接且未锁定时显示 */}
+                            {!isLocked && catLinks.length > 6 && !searchQuery && (
+                                <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+                                    <button
+                                        onClick={() => toggleCategoryExpand(cat.id)}
+                                        title={isExpanded ? "收起" : "显示全部"}
+                                        className={`p-1.5 rounded transition-all ${isExpanded 
+                                            ? 'bg-white dark:bg-slate-600 shadow text-blue-600' 
+                                            : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        {isExpanded ? (
+                                            <EyeOff size={16} />
+                                        ) : (
+                                            <Eye size={16} />
+                                        )}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                         
                         {isLocked ? (
@@ -947,13 +1094,13 @@ function App() {
                              </div>
                         ) : (
                              <>
-                                {catLinks.length === 0 ? (
+                                {displayLinks.length === 0 ? (
                                     <div className="text-center py-8 text-slate-400 text-sm italic">
                                         暂无链接
                                     </div>
                                 ) : (
-                                    <div className={`grid gap-3 ${siteSettings.cardStyle === 'simple' ? 'grid-cols-2 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10' : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'}`}>
-                                        {catLinks.map(link => renderLinkCard(link))}
+                                    <div className={`grid gap-3 ${siteSettings.cardStyle === 'simple' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6' : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'}`}>
+                                        {displayLinks.map(link => renderLinkCard(link))}
                                     </div>
                                 )}
                              </>
