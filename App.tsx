@@ -65,16 +65,14 @@ function App() {
   
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-  // Context Menu State - 移动端触摸支持
+  // Context Menu State
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, link: LinkItem | null } | null>(null);
-  const [touchTimer, setTouchTimer] = useState<NodeJS.Timeout | null>(null);
-  const [touchStart, setTouchStart] = useState<{ x: number, y: number, time: number } | null>(null);
   
   const [qrCodeLink, setQrCodeLink] = useState<LinkItem | null>(null);
 
   const [unlockedCategoryIds, setUnlockedCategoryIds] = useState<Set<string>>(new Set());
 
-  // 新增：控制分类是否展开的状态
+  // 新增：控制分类是否展开的状态 - 初始为空
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const [webDavConfig, setWebDavConfig] = useState<WebDavConfig>({
@@ -488,44 +486,14 @@ function App() {
       return !unlockedCategoryIds.has(catId);
   };
 
-  // 移动端触摸长按触发右键菜单
-  const handleLinkTouchStart = (e: React.TouchEvent, link: LinkItem) => {
-    if (e.touches.length !== 1) return;
+  // 显示上下文菜单 - 现在由点击三个点图标触发
+  const showContextMenu = (e: React.MouseEvent, link: LinkItem) => {
+    e.preventDefault();
+    e.stopPropagation();
     
-    const touch = e.touches[0];
-    setTouchStart({
-      x: touch.clientX,
-      y: touch.clientY,
-      time: Date.now()
-    });
+    let x = e.clientX;
+    let y = e.clientY;
     
-    // 设置长按计时器
-    const timer = setTimeout(() => {
-      showContextMenu(touch.clientX, touch.clientY, link);
-      setTouchTimer(null);
-    }, 800); // 800ms长按触发
-    
-    setTouchTimer(timer);
-  };
-
-  const handleLinkTouchMove = (e: React.TouchEvent) => {
-    // 如果移动了手指，取消长按计时器
-    if (touchTimer) {
-      clearTimeout(touchTimer);
-      setTouchTimer(null);
-    }
-  };
-
-  const handleLinkTouchEnd = () => {
-    // 取消长按计时器
-    if (touchTimer) {
-      clearTimeout(touchTimer);
-      setTouchTimer(null);
-    }
-    setTouchStart(null);
-  };
-
-  const showContextMenu = (x: number, y: number, link: LinkItem) => {
     // 边界调整
     if (x + 180 > window.innerWidth) x = window.innerWidth - 190;
     if (y + 220 > window.innerHeight) y = window.innerHeight - 230;
@@ -577,7 +545,7 @@ function App() {
       return (
         <div
             key={link.id}
-            className={`group relative flex flex-col ${isSimple ? 'p-2' : 'p-3'} bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:border-blue-200 dark:hover:border-slate-600 hover:-translate-y-0.5 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-750 touch-manipulation`}
+            className={`group relative flex flex-col ${isSimple ? 'p-2' : 'p-3'} bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:border-blue-200 dark:hover:border-slate-600 hover:-translate-y-0.5 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-750`}
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -589,14 +557,12 @@ function App() {
                 setContextMenu({ x, y, link });
                 return false;
             }}
-            onTouchStart={(e) => handleLinkTouchStart(e, link)}
-            onTouchMove={handleLinkTouchMove}
-            onTouchEnd={handleLinkTouchEnd}
-            onClick={() => {
-              // 防止短按触发长按菜单
-              if (touchStart && Date.now() - touchStart.time < 500) {
-                window.open(link.url, '_blank', 'noopener,noreferrer');
+            onClick={(e) => {
+              // 阻止点击三个点图标时触发链接打开
+              if ((e.target as HTMLElement).closest('.context-menu-button')) {
+                return;
               }
+              window.open(link.url, '_blank', 'noopener,noreferrer');
             }}
         >
             <a
@@ -623,10 +589,14 @@ function App() {
                 </div>
             )}
             
-            {/* 移动端长按提示 */}
-            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity md:hidden">
-              <MoreHorizontal size={14} className="text-slate-400" />
-            </div>
+            {/* 三个点图标 - 常显 */}
+            <button 
+                className="context-menu-button absolute top-2 right-2 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors z-20"
+                onClick={(e) => showContextMenu(e, link)}
+                title="更多操作"
+            >
+                <MoreHorizontal size={14} className="text-slate-400" />
+            </button>
         </div>
       );
   };
@@ -642,32 +612,23 @@ function App() {
              style={{ top: contextMenu.y, left: contextMenu.x }}
              onClick={(e) => e.stopPropagation()}
              onContextMenu={(e) => e.preventDefault()}
-             onTouchStart={(e) => e.stopPropagation()}
           >
-             <button onClick={() => { handleCopyLink(contextMenu.link!.url); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left touch-pan-y">
+             <button onClick={() => { handleCopyLink(contextMenu.link!.url); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
                  <Copy size={16} className="text-slate-400"/> <span>复制链接</span>
              </button>
-             <button onClick={() => { setQrCodeLink(contextMenu.link); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left touch-pan-y">
+             <button onClick={() => { setQrCodeLink(contextMenu.link); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
                  <QrCode size={16} className="text-slate-400"/> <span>显示二维码</span>
              </button>
              <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-2"/>
-             <button onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(contextMenu.link!); setIsModalOpen(true); setContextMenu(null); }}} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left touch-pan-y">
+             <button onClick={() => { if(!authToken) setIsAuthOpen(true); else { setEditingLink(contextMenu.link!); setIsModalOpen(true); setContextMenu(null); }}} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
                  <Edit2 size={16} className="text-slate-400"/> <span>编辑链接</span>
              </button>
-             <button onClick={() => { togglePin(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left touch-pan-y">
+             <button onClick={() => { togglePin(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors text-left">
                  <Pin size={16} className={contextMenu.link!.pinned ? "fill-current text-blue-500" : "text-slate-400"}/> <span>{contextMenu.link!.pinned ? '取消置顶' : '置顶'}</span>
              </button>
              <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-2"/>
-             <button onClick={() => { handleDeleteLink(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors text-left touch-pan-y">
+             <button onClick={() => { handleDeleteLink(contextMenu.link!.id); setContextMenu(null); }} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors text-left">
                  <Trash2 size={16}/> <span>删除链接</span>
-             </button>
-             
-             {/* 移动端关闭按钮 */}
-             <button 
-               onClick={() => setContextMenu(null)}
-               className="md:hidden mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 text-center text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-             >
-               关闭
              </button>
           </div>
       )}
@@ -756,7 +717,6 @@ function App() {
         <div 
           className="fixed inset-0 z-20 bg-black/50 lg:hidden backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
-          onTouchStart={() => setSidebarOpen(false)}
         />
       )}
 
@@ -880,7 +840,7 @@ function App() {
 
       <main 
           ref={mainRef}
-          className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-y-auto relative scroll-smooth touch-pan-y"
+          className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-y-auto relative scroll-smooth"
       >
         <header className="h-16 px-4 lg:px-8 flex items-center justify-between bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shrink-0">
           <div className="flex items-center gap-4 flex-1">
@@ -993,10 +953,9 @@ function App() {
           </div>
         </header>
 
-        {/* 移动端搜索输入框 - 已添加放大镜图标 */}
+        {/* 移动端搜索输入框 */}
         <div className="sm:hidden px-4 py-2 border-b border-slate-200 dark:border-slate-700">
             <form onSubmit={handleSearchSubmit} className="relative flex items-center">
-                {/* 添加放大镜图标 */}
                 <div className="absolute left-3 text-slate-400 pointer-events-none">
                     {searchMode === 'local' ? (
                         <Search size={18} />
@@ -1040,7 +999,8 @@ function App() {
             {categories.map(cat => {
                 let catLinks = searchResults.filter(l => l.categoryId === cat.id);
                 const isLocked = cat.password && !unlockedCategoryIds.has(cat.id);
-                const isExpanded = expandedCategories.has(cat.id) || searchQuery || activeCategory === cat.id;
+                // 修改：只根据手动展开或搜索状态决定是否展开，移除滚动自动展开
+                const isExpanded = expandedCategories.has(cat.id) || searchQuery;
                 
                 // 如果不是置顶分类，且有搜索词且在本地搜索模式下，才进行筛选
                 if (searchQuery && searchMode === 'local' && catLinks.length === 0) return null;
